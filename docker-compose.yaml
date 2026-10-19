@@ -1,0 +1,55 @@
+name: aiia
+
+services:
+  api:
+    build:
+      context: ./api
+      args:
+        TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
+    image: aiia-api:${TORCH_VARIANT:-cpu}
+    expose:
+      - "8000"
+    environment:
+      OMP_NUM_THREADS: ${API_CPUS:-4}
+    volumes:
+      - models:/models
+    shm_size: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPUS:-4}"
+          memory: ${API_MEMORY:-2g}
+    memswap_limit: ${API_MEMORY:-2g}
+    init: true
+    restart: unless-stopped
+    networks:
+      - backend
+
+  ui:
+    build: ./ui
+    image: aiia-ui:latest
+    ports:
+      - "${UI_PORT:-7860}:7860"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    init: true
+    restart: unless-stopped
+    networks:
+      - backend
+      - frontend
+
+networks:
+  backend:
+    internal: true
+  frontend:
+
+volumes:
+  models:
