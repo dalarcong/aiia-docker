@@ -6,6 +6,7 @@ where the API picks it up.
 """
 import argparse
 import time
+import math
 
 import torch
 from torch import nn
@@ -27,6 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--freeze-backbone", action="store_true", help="Train only the classification head")
     parser.add_argument("--subset", type=int, default=0, help="Use only N images per split (0 = all) for quick tests")
     parser.add_argument("--data-dir", default="/data")
+    parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=False, help="float16 mixed precision on GPU (off by default. GTX 16 GPUs produce NaNs in float16)")
 
     return parser.parse_args(argv)
 
@@ -68,7 +70,7 @@ def build_model(num_classes: int, freeze_backbone: bool) -> nn.Module:
     return model
 
 
-def run_epoch(model, loader, device, criterion, optimizer=None, scaler=None) -> tuple[float, float]:
+def run_epoch(model, loader, device, criterion, optimizer=None, scaler=None, amp=False) -> tuple[float, float]:
     """One pass over the loader. Trains if an optimizer is given, otherwise evaluates."""
     training = optimizer is not None
     model.train(training)
@@ -79,7 +81,7 @@ def run_epoch(model, loader, device, criterion, optimizer=None, scaler=None) -> 
             images = images.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
-            with torch.autocast(device.type, dtype=torch.float16, enabled=device.type == "cuda"):
+            with torch.autocast(device.type, dtype=torch.float16, enabled=amp):
                 logits = model(images)
                 loss = criterion(logits, targets)
 
@@ -113,13 +115,18 @@ def main() -> None:
 
     optimizer = torch.optim.AdamW(param_groups)
     criterion = nn.CrossEntropyLoss()
-    scaler = torch.amp.GradScaler(device.type, enabled=device.type == "cuda")
+
+    use_amp = args.amp and device.type == "cuda"
+    print(f"Mixed precision (float16): {'on' if use_amp else 'off'}")
+    scaler = torch.amp.GradScaler(device.type, enabled=use_amp)
 
     best_acc = 0.0
     for epoch in range(1, args.epochs + 1):
         start = time.perf_counter()
-        train_loss, train_acc = run_epoch(model, train_loader, device, criterion, optimizer, scaler)
-        val_loss, val_acc = run_epoch(model, val_loader, device, criterion)
+        train_loss, train_acc = run_epoch(model, train_loader, device, criterion, optimizer, scaler, use_amp)
+        if not math.isfinite(train_loss):
+            raise SystemExit("Training diverged (loss is NaN/inf). Try --no-amp or a lower --lr.")
+        val_loss, val_acc = run_epoch(model, val_loader, device, criterion, amp=use_amp)
         print(
             f"Epoch {epoch}/{args.epochs} - train loss {train_loss:.3f} acc {train_acc:.3f} - "
             f"val loss {val_loss:.3f} acc {val_acc:.3f} - {time.perf_counter() - start:.1f} s"
