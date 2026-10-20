@@ -1,12 +1,16 @@
 name: aiia
 
+# Shared by api and train
+x-api-image: &api-image
+  build:
+    context: ./api
+    args:
+      TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
+  image: aiia-api:${TORCH_VARIANT:-cpu}
+
 services:
   api:
-    build:
-      context: ./api
-      args:
-        TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
-    image: aiia-api:${TORCH_VARIANT:-cpu}
+    <<: *api-image
     expose:
       - "8000"
     environment:
@@ -46,6 +50,28 @@ services:
       - backend
       - frontend
 
+  train:
+    <<: *api-image
+    profiles: [train]
+    command: ["python", "train.py"]
+    environment:
+      OMP_NUM_THREADS: ${TRAIN_CPUS:-8}
+    volumes:
+      - models:/models
+      - data:/data
+    shm_size: 2g
+    deploy:
+      resources:
+        limits:
+          cpus: "${TRAIN_CPUS:-8}"
+          memory: ${TRAIN_MEMORY:-6g}
+    memswap_limit: ${TRAIN_MEMORY:-6g}
+    init: true
+    healthcheck:
+      disable: true
+    networks:
+      - frontend
+
 networks:
   backend:
     internal: true
@@ -53,3 +79,4 @@ networks:
 
 volumes:
   models:
+  data:

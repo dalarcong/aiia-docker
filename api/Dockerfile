@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Base image
 FROM python:3.12-slim
 
@@ -21,8 +22,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /models "$TORCH_HOME" \
-    && chown app:app /models "$TORCH_HOME"
+    && mkdir -p /models /data "$TORCH_HOME" \
+    && chown app:app /models /data "$TORCH_HOME"
 
 WORKDIR /app
 
