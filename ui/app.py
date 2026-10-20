@@ -38,7 +38,7 @@ demo = gr.Interface(
     ],
     outputs=[gr.Label(label="Predictions"), gr.Markdown()],
     title="ResNet-18 image classifier",
-    description="Upload an image. The prediction is computed by a separate inference container (FastAPI)",
+    description="Upload an image. The prediction is computed by the FastAPI inference API.",
     flagging_mode="never",
 )
 
