@@ -1,0 +1,22 @@
+# GPU override (NVIDIA) Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
+# Builds the api image with CUDA-enabled PyTorch and gives api and train access to the GPU.
+
+x-gpu: &gpu
+  build:
+    args:
+      TORCH_VARIANT: cu126
+  image: aiia-api:cu126
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+services:
+  api:
+    <<: *gpu
+  train:
+    <<: *gpu
